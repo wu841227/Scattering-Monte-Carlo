@@ -1,0 +1,685 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+
+#define InitRandomGen	(double) RandomGen(0, 1, NULL)
+#define RandomNum		(double) RandomGen(1, 0, NULL)
+#define SIGN(x)			((x)>=0 ? 1:-1)
+
+double 	RandomGen(char Type, long Seed, long *Status);
+double	rnd;
+
+
+int main (void) {
+/***************************** DEFINE VARIABLES ********************************/
+double 	nphotons;											/* Number of Photons to be launched */
+double	i_photon;											/* Number of the Current Photon */
+double 	mu_a;												/* Absorbtion Coefficient (1/cm) */
+double 	mu_s;												/* Scattering Coefficient (1/cm) */
+double	mu_t;												/* Combination of Scattering and Absorbtion Coefficients */
+double 	x,y,z;												/* Position of Photon */
+double	xC,yC,zC;											/* Temporary Position Placeholders */
+double	xe,ye, ze;											/* Position of Escaping Photon */
+double	xl,yl,zl;											/* Position of the Photon (x,y,z) at Lens 1(t,b) */
+double	xBP,yBP,zBP;										/* Position of the Photon (x,y,z) at Bandpass Filter */
+double 	angx, angy, angz;									/* Angle of x, y, and z in Cosine */
+double	angx1, angy1, angz1;								/* Temporary Changed Angles */
+double	angze;												/* Escape Angle of Z */
+double	width;												/* Width of Incident beam on Focal Lens */
+double	angle;												/* Maximum Angle of Photons After Focal Lens */
+double	escapeangle;										/* Angle of escape (psi) */
+double	pi;													/* Pi */
+double	c;													/* Speed of Light */
+double 	w;													/* Weight (Power) */
+double	wmin;												/* Minimum Weight for Contined Propagation */
+double	w_abs;												/* Absorbed Weight for Each Hop */
+double	w1;													/* Temporary Weight Variable */
+double	wR;													/* Reflected Weight of Photon */
+double	wRX;												/* Temporary Reflected Weight of Photon */
+double	wT;													/* Transmitted, Reflected total weight */
+double	wT_B,wR_B;											/* Transmitted and Reflected Background */
+double 	g;													/* Anisotropy */
+double 	L;													/* Total Pathlength */
+double	nt;													/* Index of refraction */
+double	Lmax;												/* Maximum Total Pahtlength */
+double	s;													/* Stepsize */
+double	top_of_medium;										/* Top Border of Medium */
+double	bottom_of_medium;									/* Bottom Border of Medium */
+double	d;													/* Depth of Focus */
+double	m;													/* Distance from the top of the medium to top lens*/
+double	n;													/* Distance from bottom of medium to bottom lens */
+double	f;													/* Focal Length */
+double	e_radius;											/* Radius of Photon Receptor (outside of medium) */
+double	radius;												/* Radial Distance of  Photon from Starting Point */
+double	r_at_lens;											/* Radius at lens 1(t,b) */
+double	angzmin;											/* Cosine of  the minimum angle for capture */
+double	threshold;											/* Variable for Roulette */
+short	aliveordead;										/* Is Photon Alive? 1=alive, 0=dead */
+double	re;													/* Radius of Escape */
+double	rinit;												/* Initial (entrance) radius */
+double	box,box2;											/* Side Length of Focal Box */
+
+
+double	arbitrary;											/* Arbitrary Variable for costheta */
+double	theta_i;											/* Internal theta in medium */
+double	theta_t;											/* Transmitted angle from surface */
+double	costheta;											/* Cosine of Theta */
+double	cospsi;												/* Cosine of Psi */
+double	sinpsi;												/* Sine of Psi */
+double	sintheta;											/* Sine of Theta */
+double	psi;												/* Psi */
+double	wrongsinpsi;										/* Non-abs sin psi */
+double	theta_ttop;											/* Angle of escape after Lens 1(t) */
+double	theta_tbot;											/* Angle of escape after Lens 1(b) */
+
+double	dSampLens;											/* Distance from top and bottom of medium to the lens */
+double	rlens;												/* Radius of the Lens */
+double	slens;												/* Stepsize to the lens */
+double	sBP;												/* Stepsize to the Bandpass Filter */
+double	dlensBP;											/* Distance from Lens to Bandpass Filter */
+double	r_at_BP;											/* Radius at Bandpass Filter */
+double	rBP;												/* Radius of the Bandpass Filter */
+double 	wSUM;												/* Sum of the Weight */
+double	wtSUM;
+double	wrSUM;
+
+short	ir;													/* Index to Position */
+//double	NR;												/* Number of Radial Positions */
+//double	dr;												/* Radial Bin Size */
+double	Crad[500];											/* Photon Concentration */
+double	iphotons[101];										/* Photon Output Counter */
+double	i_angphoton[101];									/* Index of the Angle of the Output Photon */
+double	r_photon[101];										/* Radius of Escaping Photon*/
+double	positionX[101];										/* X position of escape */
+double	positionY[101];										/* Y position of escape */
+double	i_scat;												/* Scattering Counter */
+double	i_path;												/* Pathlength Failure Counter */
+double	i_weight;											/* Counter of Photons Dead Due to Weight= 0 */
+double	i_lensT;											/* Counter of Dead Photons Missing Bottom Lens */
+double	i_lensR;											/* Counter of Dead Photons Missing Top Lens */
+double	i_bpT, i_bpR;										/* Counter of Dead Photons Missing BP Filter (trans and reflected) */
+double	i_angT, i_angR;										/* Counter of Dead Photons With Angle Too Steep */
+double	i_foc;												/* Counter of Dead Photons Missing Focus */
+double	i_checker;											/* Mobile Counter to Find Where Photons Die */
+double	incx,incy,incz; 									/* Focus Check Increment */
+double	t;													/* Time */
+double 	dx,dy,dz;											/* Change in x,y,z Position */
+double 	txa,txb,tya,tyb,tza,tzb;							/* Variables for Focal Check */
+double 	yxa,yxb,zxa,zxb,xya,xyb,zya,zyb,xza,xzb,yza,yzb;	/* Variables for Focal Check */
+double	NA;													/* Numerical Aperture of Lens 1 */
+double	nex;												/* Index of medium Surrounding Lens 1 */
+double 	tx;													/* Time Step */
+double	zz;													/* Type of Photon: zz= 1: fundamental, zz= 2: flourescent */
+FILE *target;												/* Pointer to the Reflected Output File */
+FILE *target2;												/* Pointer to the Transmitted Output File*/
+FILE *target3;												/* Pointer to Data Output File */
+
+
+printf("start\n");
+
+/****************************** FILE PARAMETERS ********************************/
+
+/**** Reflected Photons ****/
+target= fopen("reflected.out", "w");
+/**** Transmitted Photons ****/
+target2= fopen("transmitted.out", "w");
+target3= fopen("data.out", "w");
+//	fprintf(target3, "Photon # \t # Scat Events \t Aliveordead \n");
+
+/******************************** PROGRAM RUN **********************************/
+
+/**** Bin Parameters ****/
+//NR=				500;						/* Number of Radial Bins */
+//dr=				e_radius/NR;
+
+
+//for (ir=0; ir<=NR; ir++) {
+//	Crad[ir] =	0;
+//};
+
+
+
+
+/********************************* INPUTS **************************************/
+pi=					3.1415926;
+c=					0.299792458;
+
+nphotons=			50000;
+
+
+NA =				0.25;
+mu_s=				95;								/* Scattering Coefficient */
+mu_a=				5;								/* Coefficient of Absorbtion */
+mu_t=				mu_s + mu_a;					/* Combined Coefficient */
+g=					0.9;							/* Anisotropy */
+nt=					1.50;							/* Index of Refraction */
+wmin=				0.001;							/* Minimum Weight for Propagation */
+threshold=			100.0;							/* Variable used in Roulette */
+top_of_medium=		0.00;							/* End of the medium in Epi-mode */
+bottom_of_medium=	0.04;							/* End of the medium in Transmission Mode */
+d=					0.02;							/* Depth of Focus */
+dlensBP=			10.00;							/* Distance from Lens to BP */
+nex=				1.00;							/* External Index of Refraction */
+rBP=				1.75;							/* Radius of BP filter */
+rlens=				1.0;							/* Diameter of the Lens */
+f= 					rlens/(2*tan(asin(NA/nex)));	/* Focal Length of Lens 1 */
+angzmin=			0.9925;							/* Minimum Angle of Photon Catching (12 degrees) */
+Lmax=				1.0;							/* Maximum Pathlength of Photon */
+
+i_photon=			0;
+i_path= 			0;
+i_weight= 			0;
+i_lensT= 			0;
+i_lensR= 			0;
+i_bpT= 				0;
+i_bpR= 				0;
+i_angT= 			0;
+i_angR= 			0;
+i_foc=				0;
+i_checker= 			0;
+wT=					0;
+wR=					0;
+wT_B=				0;
+wR_B=				0;
+
+InitRandomGen;
+
+/*** Photon Start Angle & Direction ***/
+
+/* Constant Parameters */
+double phi, thetaone, thetatwo, alpha, a;
+
+phi = 		atan(rlens/(2*f));
+thetaone =	(pi/2) - phi;
+thetatwo =	asin((sin(thetaone)/nt));
+alpha =		rlens/2;
+a = 		d/tan(thetatwo);
+dSampLens =	(alpha-a)/tan(phi);
+
+m=					dSampLens;							/* Distance from top of medium to Lens 1(t) */
+n=					dSampLens-(bottom_of_medium-d);		/* Distance from bottom of medium to Lens 1(b) */
+
+
+/*---------------------ITERATION SETUP (DO: 0)-----------------------*/
+do{
+	mu_s += 20;
+
+	mu_t=		mu_s + mu_a;
+	i_photon=			0;
+
+	i_path= 0;
+	i_weight= 0;
+	i_lensT= 0;
+	i_lensR= 0;
+	i_bpT= 0;
+	i_bpR= 0;
+	i_angT= 0;
+	i_angR= 0;
+
+
+
+/*** Innitialization - Launch Photon ***/
+
+
+ONE:
+
+/*---------------------------DO: 1----------------------------------*/
+if(i_photon < nphotons - 1){
+	i_photon += 	1;										/* Go up by 1 in Photon Count */
+	aliveordead = 	1;										/* Photon is Alive */
+	L = 			0;										/* Innitial Pathlength is Zero */
+	w= 				1.0;									/* Photon Starts at Weight 1 */
+	wRX=			0.0;									/* Reflected Weight is Zero */
+	i_scat=			0;										/* Scattering Events Reset to Zero */
+	t=				0;										/* Reset Time to Zero for each Photon */
+	tx =			0.0;
+
+
+/*** Photon Start Angle & Direction ***/
+
+if (zz == 1){
+	/* Variable Parameters */
+	double beta, thetaoneB, thetatwoB, phiB, b, test, theta;
+	beta =		((width/2) - (RandomNum*(width/2)));
+	phiB =		atan(beta/f);
+	thetaoneB =	(pi/2) - phiB;
+	//thetatwoB =	asin(sin(thetaoneB)/nt);
+	b = 		beta - (tan(phiB)*dSampLens);
+	theta =		atan(b/d);
+
+
+	/* Set x,y,z */
+	psi = 2*pi*RandomNum;
+	x = b*cos(psi);
+	y = b*sin(psi);
+	z = 0.000000001;
+
+	angx =		x/sqrt(b*b + d*d);
+	angy =		y/sqrt(b*b + d*d);
+	angz =		d/sqrt(b*b + d*d);
+
+}else{
+	x = 0;
+	y = 0;
+	z = d;
+
+	angx = 0;
+	angy = 0;
+	angz = 1;
+};
+
+
+/*************** Propagation Routine - HOP-CHECK-SPIN-DROP ***************/
+
+
+/*---------------------------DO: 2---------------------------------*/
+
+do{
+
+/*******************FIX THIS***********/
+
+	i_scat +=1;
+
+	/*** HOP ***/
+			s= -log(RandomNum)/mu_t;							/* Stepsize (log is base e) */
+
+			if (L + s <= Lmax){
+				L += s/*(sqrt((xC-x)*(xC-x) + (yC-y)*(yC-y) + (zC-z)*(zC-z)))*/;
+				t += s/(c/nt);
+			} else {
+				aliveordead=	0;
+				i_path +=1;
+			};
+
+			xC = x + s*angx;
+			yC = y + s*angy;
+			zC = z + s*angz;
+
+
+	/*** DROP (weight) ***/
+			double alb;
+			alb=(mu_s/mu_t);
+
+			if (w > wmin ){
+				w1=		alb*w;
+				w=	w1;
+			} else {
+				/**** Roulette ****/
+				if(RandomNum <= 1/threshold && (aliveordead==1 || aliveordead ==2)){
+					w1=	threshold*w1;
+					w=	w1;
+				} else {
+					if (aliveordead == 1 || aliveordead == 2){
+						w1=	0;
+						w=	w1;
+						aliveordead=0;
+						i_weight +=1;							/* Increment number of photons dead due to weight */
+					};
+				};
+			};
+
+
+	/*** SPIN ***/
+
+			if (g == 0.0){
+				costheta= 2.0*RandomNum - 1.0;
+			} else {
+				arbitrary=		((1.0 - g*g) / (1.0 - g + 2*g*RandomNum));
+				costheta= 0.5*g*(1.0 + g*g - arbitrary*arbitrary)/(2.0*g);
+			};
+
+			sintheta= 	sin(acos(costheta));
+			psi=	2.0*pi*RandomNum;
+			cospsi = cos(psi);
+			sinpsi = sin(psi);
+/*			if (psi < pi){
+				sinpsi = sin(psi);
+			}else {
+				sinpsi = -sin(psi);
+			};
+
+			/** Define the new Angle of the Beam **/
+			if(fabs(angz) > 0.9999){
+				angx1=	sintheta*cospsi;
+				angy1=	sintheta*sinpsi;
+				angz1=	/*angz*costheta/fabs(angz); */costheta * SIGN(angz);
+			} else {
+//				double temp;
+//			    temp = sqrt(1.0 - angz * angz);
+//				angx1 = sintheta * (angx * angz * cospsi - angy * sinpsi) / temp + angx * costheta;
+//				angy1 = sintheta * (angy * angz * cospsi + angx * sinpsi) / temp + angy * costheta;
+//				angz1 = -sintheta * cospsi * temp + angz * costheta;
+
+//				angx1 = sinpsi*costheta;//sqrt(sintheta*sintheta*sinpsi*sinpsi + costheta*costheta + 1)
+//				angy1 = sinpsi*sintheta;
+//				angz1 = costheta;
+
+				angx1 = (sintheta/(sqrt(1-angz*angz)))*(angx*angz*cospsi - angy*sinpsi) + angx*costheta;
+				angy1 = (sintheta/(sqrt(1-angz*angz)))*(angy*angz*cospsi - angx*sinpsi) + angy*costheta;
+				angz1 = -sintheta*cospsi*(sqrt(1-angz*angz)) + angz*costheta;
+			};
+
+			/*** Fresnel's Reflection Probability Equations ***/
+
+				theta_i=	acos(abs(costheta));
+
+				theta_t=	asin(nt*sintheta);
+
+				double arbitrary1;
+				arbitrary1=	(theta_i - theta_t);
+
+				double arbitrary2;
+				arbitrary2=	(theta_i + theta_t);
+
+				double R_theta;
+				R_theta=	.5*(((sin(arbitrary1)*sin(arbitrary1))/(sin(arbitrary2)*sin(arbitrary2))) + ((tan(arbitrary1) * tan(arbitrary1))/(tan(arbitrary2) * tan(arbitrary2))));
+
+	/*** CHECK (in/out of medium) ***/
+
+		/**** Transmitted ****/
+
+			if (zC >= bottom_of_medium && aliveordead==1){
+
+				/* Position of Photon at Boundary */
+				double sprime;																	/* Shortened Stepsize due to End of Medium */
+					sprime=		((bottom_of_medium - z)/angz);
+
+					xe = x + sprime*angx;
+					ye = y + sprime*angy;
+					ze = z + sprime*angz;
+	//				fprintf(target3, "%5.5f \t %5.5f \t %5.5f \t %5.5f \t %5.5f \t %5.5f \n", x, y, ze,t,i_scat, t);
+
+				if (RandomNum < R_theta && aliveordead==1) {														/* Fresnel Probability of Internal Reflection */
+					angz=	-angz;
+					x=		xe;
+					y=		ye;
+					z=		ze;
+
+					L = L - s + sprime;
+					t = L/(c/nt);
+
+				} else {
+					escapeangle=	cos(asin(nt*sin(acos(angz))));
+					re= sqrt(xe*xe + ye*ye);
+
+					/* ANGULAR AND SPATIAL LIMITS ON OUTPUT CAPTURING*/
+
+					slens= dSampLens/angz;
+
+					angz = cos(asin(nt*sin(acos(angz))));
+					angx = cos(asin(nt*sin(acos(angx))));
+					angy = cos(asin(nt*sin(acos(angy))));
+
+					xl= xe + slens*angx;
+					yl= ye + slens*angy;
+					zl= ze + slens*angz;
+
+					r_at_lens = sqrt(xl*xl + yl*yl);
+
+
+					if (r_at_lens >= rlens && aliveordead ==1){
+						i_lensT += 1;
+						aliveordead = 0.0;
+					} else {
+						psi= acos(angz);
+						theta_tbot= atan(((r_at_lens + n*tan(psi)-(f/(f-n)))*(n-f))/(n*f));
+						angz= cos(theta_tbot);
+
+						sBP=	dlensBP/angz;
+
+						xBP=	xl + sBP*angx;
+						yBP=	yl + sBP*angy;
+						zBP=	zl + sBP*angz;
+
+						if (fabs((angz)) > angzmin && aliveordead == 2) {
+							aliveordead = 0.0;
+							i_angT += 1;
+						} else {
+							r_at_BP= sqrt(xBP*xBP + yBP*yBP);
+
+							if (r_at_BP >= rBP && aliveordead == 2){
+								i_bpT+= 1;
+								aliveordead = 0.0;
+							}else{
+								wT += w;
+								aliveordead = 0.0;
+							};
+						};
+					};
+				};
+			} else{
+
+			/****** Reflected ******/
+
+				if (zC <= top_of_medium && aliveordead==1){
+					/* Position of Photon at Boundary */
+					double sprime1;																	/* Shortened Stepsize due to End of Medium */
+						sprime1=		((top_of_medium - z)/angz);
+
+						xe = x + sprime1*angx;
+						ye = y + sprime1*angy;
+						ze = z + sprime1*angz;
+
+					if (RandomNum < R_theta) {
+						angz=	-angz;
+						x=		xe;
+						y=		ye;
+						z=		ze;
+
+
+						L = L - s + sprime1;
+						t = L/(c/nt);
+
+					} else {
+						double rsqr;
+						escapeangle=	cos(asin(nt*sin(acos(angz))));
+						rsqr= xe*xe + ye*ye;
+						re= sqrt(rsqr);
+
+						/* ANGULAR AND SPATIAL LIMITS ON OUTPUT CAPTURING*/
+
+						slens= dSampLens/angz;
+
+						angz = cos(asin(nt*sin(acos(angz))));
+						angx = cos(asin(nt*sin(acos(angx))));
+						angy = cos(asin(nt*sin(acos(angy))));
+
+						xl= xe + slens*angx;
+						yl= ye + slens*angy;
+						zl= ze + slens*angz;
+
+						r_at_lens = sqrt(xl*xl + yl*yl);
+
+
+
+						if (r_at_lens >= rlens && aliveordead ==2){
+							i_lensR += 1;
+							aliveordead = 0.0;
+						} else {
+							psi= acos(angz);
+							theta_ttop= atan(((r_at_lens + m*tan(psi)-(f/(f-m)))*(m-f))/(m*f));
+							angz= cos(theta_ttop);
+
+							sBP=	dlensBP/angz;
+
+							xBP=	xl + sBP*angx;
+							yBP=	yl + sBP*angy;
+							zBP=	zl + sBP*angz;
+
+							if (fabs((angz)) > angzmin && aliveordead == 2) {
+								aliveordead = 0.0;
+								i_angR += 1;
+							} else {
+								r_at_BP= sqrt(xBP*xBP + yBP*yBP);
+
+								if (r_at_BP >= rBP && aliveordead == 2){
+									i_bpR +=1;
+									aliveordead = 0.0;
+								} else {
+								wR += w;
+								aliveordead = 0.0;
+
+								};
+							};
+						};
+					};
+				}else {
+
+					x = xC;
+					y = yC;
+					z = zC;
+
+					angx=	angx1;
+					angy=	angy1;
+					angz=	angz1;
+
+				};
+			};
+	}while(aliveordead==1 || aliveordead==2);
+	/*---------------------------END DO: 2 ------------------------------*/
+
+
+
+}else{
+	zz = 2;
+	nphotons = 10000;
+	i_photon = 0;
+
+	fprintf(target, "/n /n");
+
+	goto ONE;
+};
+
+
+/*-------------------------END DO: 1--------------------------------*/
+
+
+//}while (mu_s <= 300);
+/*-------------------------END DO: 0--------------------------------*/
+
+//fprintf(target3, "\n \n Pathlength \t Weight \t LensT \t LensR \t bpT \t bpR \t angT \t angR \t Focus \t Checker \n");
+//fprintf(target3, "%5.6f \t %5.6f \t %5.6f \t %5.6f \t %5.6f \t %5.6f \t %5.6f \t %5.6f \t  %5.6f \t %5.6f \n", i_path, i_weight, i_lensT, i_lensR, i_bpT, i_bpR, i_angT, i_angR, i_foc, i_checker);
+//fprintf(target3, "\n \n Trans Wt \t Refl Wt \t Trans Back \t Refl Back \n");
+//fprintf(target3, "%5.6f \t %5.6f \t %5.6f \t %5.6f \n", wT, wR, wT_B, wR_B);
+
+printf("\n \nLensT \t LensR \t bpT \t bpR \t angT \t angR \t Focus \n");
+printf("%5.0f \t %5.0f \t %5.0f \t %5.0f \t %5.0f \t %5.0f \t %5.0f \n", i_lensT, i_lensR, i_bpT, i_bpR, i_angT, i_angR, i_foc);
+printf("\n \nTrans Wt \t Refl Wt \t Trans Back \t Refl Back \n");
+printf("%5.2f \t \t %5.2f \t \t %5.2f \t \t %5.2f \n", wT, wR, wT_B, wR_B);
+
+//printf("checker \n");
+//printf("%5.5f \n", i_checker);
+
+//fclose(target);
+//fclose(target2);
+fclose(target3);
+
+printf("finish\n");
+
+}; /**** End of MAIN ****/
+
+
+
+
+
+
+
+
+
+
+/******* TO DO *******
+Notes:
+The reflected part of the photon when it is incident on the upper or lower boundary behaves as if it has hit a flat mirror (non-scattering).
+*/
+
+
+
+
+/**************************************************************************
+ *	RandomGen (taken from tiny_mc.c at
+ *			http://omlc.ogi.edu/classroom/ece532/class4/trmc/trmc.c)
+ *      A random number generator that generates uniformly
+ *      distributed random numbers between 0 and 1 inclusive.
+ *      The algorithm is based on:
+ *      W.H. Press, S.A. Teukolsky, W.T. Vetterling, and B.P.
+ *      Flannery, "Numerical Recipes in C," Cambridge University
+ *      Press, 2nd edition, (1992).
+ *      and
+ *      D.E. Knuth, "Seminumerical Algorithms," 2nd edition, vol. 2
+ *      of "The Art of Computer Programming", Addison-Wesley, (1981).
+ *
+ *      When Type is 0, sets Seed as the seed. Make sure 0<Seed<32000.
+ *      When Type is 1, returns a random number.
+ *      When Type is 2, gets the status of the generator.
+ *      When Type is 3, restores the status of the generator.
+ *
+ *      The status of the generator is represented by Status[0..56].
+ *
+ *      Make sure you initialize the seed before you get random
+ *      numbers.
+ ****/
+#define MBIG 1000000000
+#define MSEED 161803398
+#define MZ 0
+#define FAC 1.0E-9
+
+double RandomGen(char Type, long Seed, long *Status){
+  static long i1, i2, ma[56];   /* ma[0] is not used. */
+  long        mj, mk;
+  short       i, ii;
+
+
+  Seed= 769;
+
+  if (Type == 0) {              /* set seed. */
+    mj = MSEED - (Seed < 1 ? -Seed : Seed);
+    mj %= MBIG;
+    ma[55] = mj;
+    mk = 1;
+    for (i = 1; i <= 54; i++) {
+      ii = (21 * i) % 55;
+      ma[ii] = mk;
+      mk = mj - mk;
+      if (mk < MZ)
+        mk += MBIG;
+      mj = ma[ii];
+    }
+    for (ii = 1; ii <= 4; ii++)
+      for (i = 1; i <= 55; i++) {
+        ma[i] -= ma[1 + (i + 30) % 55];
+        if (ma[i] < MZ)
+          ma[i] += MBIG;
+      }
+    i1 = 0;
+    i2 = 31;
+  } else if (Type == 1) {       /* get a number. */
+    if (++i1 == 56)
+      i1 = 1;
+    if (++i2 == 56)
+      i2 = 1;
+    mj = ma[i1] - ma[i2];
+    if (mj < MZ)
+      mj += MBIG;
+    ma[i1] = mj;
+    return (mj * FAC);
+  } else if (Type == 2) {       /* get status. */
+    for (i = 0; i < 55; i++)
+      Status[i] = ma[i + 1];
+    Status[55] = i1;
+    Status[56] = i2;
+  } else if (Type == 3) {       /* restore status. */
+    for (i = 0; i < 55; i++)
+      ma[i + 1] = Status[i];
+    i1 = Status[55];
+    i2 = Status[56];
+  } else
+    puts("Wrong parameter to RandomGen().");
+  return (0);
+}
+#undef MBIG
+#undef MSEED
+#undef MZ
+#undef FAC
+
